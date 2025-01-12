@@ -1,0 +1,9 @@
+{
+    "env": {
+      "NODE_NO_WARNINGS": "1"
+    },
+    "watch": ["server.ts", "src"],
+    "ext": ".ts,.js",
+    "ignore": ["src/**/*.spec.ts"],
+    "exec": "ts-node ./server.ts"
+  }

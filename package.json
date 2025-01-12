@@ -1,0 +1,13 @@
+{
+    "name": "exam-generator",
+    "version": "1.0.0",
+    "private": true,
+    "scripts": {
+      "client": "cd client && npm start",
+      "server": "cd server && npm run dev",
+      "dev": "concurrently \"npm run server\" \"npm run client\""
+    },
+    "devDependencies": {
+      "concurrently": "^8.2.2"
+    }
+  }
