@@ -296,7 +296,6 @@ const CreateExamModal: React.FC<CreateExamModalProps> = ({
                         ...prev,
                         [type]: e.target.checked
                       }))}
-                      className="form-checkbox h-5 w-5 text-blue-600 rounded"
                     />
                     <span className="text-gray-700">
                       {getQuestionTypeLabel(type)}
