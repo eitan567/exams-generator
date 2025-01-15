@@ -78,6 +78,35 @@ export const ExamEditor: React.FC<ExamEditorProps> = ({ exam, onExamUpdate }) =>
     setChangedQuestions((prev) => new Set(prev).add(localExam.sections[sectionIndex].questions[questionIndex].id));
   };
 
+  const handleAnswerChange = (
+    sectionIndex: number,
+    questionIndex: number,
+    answerIndex: number,
+    checked: boolean,
+    type: 'single-choice' | 'multiple-choice' | 'open-ended'
+  ) => {
+    const updatedQuestion = { ...localExam.sections[sectionIndex].questions[questionIndex] };
+    
+    if (type === 'single-choice') {
+      // For radio buttons, set all answers to false first, then set the selected one to true
+      updatedQuestion.answers = updatedQuestion.answers!.map((ans, idx) => ({
+        ...ans,
+        is_correct: idx === answerIndex ? checked : false
+      }));
+    } else {
+      // For checkboxes, just toggle the selected answer
+      updatedQuestion.answers![answerIndex].is_correct = checked;
+    }
+    
+    // Mark all answers as non-AI-generated since we're making manual changes
+    updatedQuestion.answers = updatedQuestion.answers!.map(ans => ({
+      ...ans,
+      is_ai_generated: false
+    }));
+    
+    handleQuestionUpdate(sectionIndex, questionIndex, updatedQuestion);
+  };
+
   const handleSaveChanges = async () => {
     setSaving(true);
     try {
@@ -188,12 +217,13 @@ export const ExamEditor: React.FC<ExamEditorProps> = ({ exam, onExamUpdate }) =>
                                     type={question.type === 'single-choice' ? 'radio' : 'checkbox'}
                                     name={`question-${question.id}`}
                                     checked={answer.is_correct}
-                                    onChange={(e) => {
-                                      const updatedQuestion = { ...question };
-                                      updatedQuestion.answers![answerIndex].is_correct = e.target.checked;
-                                      updatedQuestion.answers![answerIndex].is_ai_generated = false;
-                                      handleQuestionUpdate(sectionIndex, questionIndex, updatedQuestion);
-                                    }}
+                                    onChange={(e) => handleAnswerChange(
+                                      sectionIndex,
+                                      questionIndex,
+                                      answerIndex,
+                                      e.target.checked,
+                                      question.type
+                                    )}
                                     disabled={!changedQuestions.has(question.id)}
                                     className={question.type === 'single-choice' ? 
                                       "form-radio h-5 w-5 text-blue-600 ml-2" : 
