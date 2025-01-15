@@ -1,3 +1,3 @@
-export { default as ExamEditor } from './ExamEditor';
-export { default as ExamTest } from './ExamTest';
+export { default as ExamEditor } from './exam/ExamEditor';
+export { default as ExamTest } from './exam/ExamTest';
 export { default as Login } from '../Login';

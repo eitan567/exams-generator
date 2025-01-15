@@ -1,265 +1,401 @@
-// services/examService.ts
 import { supabase } from '../lib/supabase';
-import { Exam, Section, Question, Answer, ExamMedia } from '../types/exam';
+import { Exam, Section, Question, Answer } from '../types/exam';
+
+interface ExamSettings {
+  openQuestions: boolean;
+  multipleChoice: boolean;
+  singleChoice: boolean;
+  questionsPerSection: number;
+}
+
+interface ExamDetails {
+  title: string;
+  description?: string;
+  subject?: string;
+  grade_level?: string;
+  alias: string;
+}
+
+interface CreateExamParams {
+  file: File;
+  settings: ExamSettings;
+  title: string;
+  description?: string;
+  subject?: string;
+  grade_level?: string;
+  alias?: string;
+}
 
 export class ExamService {
   private static API_URL = process.env.REACT_APP_API_URL || 'http://localhost:5000';
 
-  // Generate alias using backend API
-  static async generateAlias(examContent: string): Promise<string> {
+  static async createExam(params: CreateExamParams): Promise<string> {
+    try {
+      // Get the current user
+      const { data: { user }, error: userError } = await supabase.auth.getUser();
+      if (userError || !user) throw new Error('Not authenticated');
+
+      const formData = new FormData();
+      formData.append('file', params.file);
+      formData.append('options', JSON.stringify(params.settings));
+
+      // Call create-exam endpoint
+      const response = await fetch(`${this.API_URL}/api/create-exam`, {
+        method: 'POST',
+        body: formData
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to create exam');
+      }
+
+      const { exam } = await response.json();
+
+      // Save exam to Supabase
+      const { data: savedExam, error: examError } = await supabase
+        .from('exams')
+        .insert({
+          title: params.title,
+          description: params.description,
+          subject: params.subject,
+          grade_level: params.grade_level,
+          alias: params.alias || params.title,
+          is_published: false,
+          user_id: user.id,
+          created_by: user.id
+        })
+        .select()
+        .single();
+
+      if (examError) throw examError;
+
+      // Get the exam ID as string
+      const examId = savedExam.id.toString();
+
+      // Save sections and their questions
+      for (const section of exam.sections) {
+        const { data: savedSection, error: sectionError } = await supabase
+          .from('sections')
+          .insert({
+            exam_id: savedExam.id,
+            title: section.title,
+            instructions: section.instructions,
+            order_index: exam.sections.indexOf(section)
+          })
+          .select()
+          .single();
+
+        if (sectionError) throw sectionError;
+
+        // Save questions for this section
+        for (const question of section.questions) {
+          const { data: savedQuestion, error: questionError } = await supabase
+            .from('questions')
+            .insert({
+              section_id: savedSection.id,
+              text: question.text,
+              type: question.type,
+              points: question.points,
+              order_index: section.questions.indexOf(question)
+            })
+            .select()
+            .single();
+
+          if (questionError) throw questionError;
+
+          // Save answers if they exist
+          if (question.answers) {
+            const answersToInsert = question.answers.map((answer: string, index: number) => ({
+              question_id: savedQuestion.id,
+              text: answer,
+              is_correct: question.correctAnswers?.includes(answer),
+              order_index: index
+            }));
+
+            const { error: answersError } = await supabase
+              .from('answers')
+              .insert(answersToInsert);
+
+            if (answersError) throw answersError;
+          }
+        }
+      }
+
+      return examId;  // Return the string ID
+    } catch (error) {
+      console.error('Error in createExam:', error);
+      throw error;
+    }
+  }
+
+  static async generateAlias(content: string): Promise<string> {
     try {
       const response = await fetch(`${this.API_URL}/api/generate-alias`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ content: examContent })
+        body: JSON.stringify({ content })
       });
 
       if (!response.ok) {
         throw new Error('Failed to generate alias');
       }
 
-      const data = await response.json();
-      return data.alias || 'מבחן חדש';
+      const { alias } = await response.json();
+      return alias;
     } catch (error) {
       console.error('Error generating alias:', error);
-      return 'מבחן חדש';
+      throw error;
     }
   }
 
-  // Create new exam
-  static async createExam(examData: Partial<Exam>): Promise<Exam | null> {
-    const { data, error } = await supabase
-      .from('exams')
-      .insert([examData])
-      .select()
-      .single();
+  static async createExamFromFile(
+    file: File,
+    details: ExamDetails,
+    settings: ExamSettings
+  ): Promise<string> {
+    try {
+      // First, get the exam content from the AI service
+      const formData = new FormData();
+      formData.append('file', file);
+      formData.append('settings', JSON.stringify(settings));
+      formData.append('details', JSON.stringify(details));
 
-    if (error) {
-      console.error('Error creating exam:', error);
-      return null;
-    }
+      const response = await fetch(`${this.API_URL}/api/create-exam`, {
+        method: 'POST',
+        body: formData
+      });
 
-    return data;
-  }
-
-  // Save complete exam with sections, questions, and answers
-  static async saveCompleteExam(examData: Exam): Promise<boolean> {
-    const { data: exam, error: examError } = await supabase
-      .from('exams')
-      .upsert({
-        id: examData.id,
-        title: examData.title,
-        alias: examData.alias,
-        created_by: examData.created_by,
-        is_published: examData.is_published,
-        description: examData.description,
-        subject: examData.subject,
-        grade_level: examData.grade_level
-      })
-      .select()
-      .single();
-
-    if (examError) {
-      console.error('Error saving exam:', examError);
-      return false;
-    }
-
-    // Save sections
-    for (const section of examData.sections) {
-      const { error: sectionError } = await supabase
-        .from('sections')
-        .upsert({
-          id: section.id,
-          exam_id: exam.id,
-          title: section.title,
-          instructions: section.instructions,
-          order_index: section.order_index
-        });
-
-      if (sectionError) {
-        console.error('Error saving section:', sectionError);
-        return false;
+      if (!response.ok) {
+        throw new Error('Failed to create exam content');
       }
 
-      // Save questions
-      for (const question of section.questions) {
-        const { data: savedQuestion, error: questionError } = await supabase
-          .from('questions')
-          .upsert({
-            id: question.id,
-            section_id: section.id,
-            text: question.text,
-            type: question.type,
-            points: question.points,
-            order_index: question.order_index
+      const examContent = await response.json();
+
+      // Then save the exam to Supabase
+      const { data: exam, error: examError } = await supabase
+        .from('exams')
+        .insert({
+          title: details.title,
+          description: details.description,
+          subject: details.subject,
+          grade_level: details.grade_level,
+          is_published: false
+        })
+        .select()
+        .single();
+
+      if (examError) throw examError;
+
+      // Save sections and questions
+      for (const section of examContent.sections) {
+        const { data: savedSection, error: sectionError } = await supabase
+          .from('sections')
+          .insert({
+            exam_id: exam.id,
+            title: section.title,
+            instructions: section.instructions,
+            order_index: section.order_index
           })
           .select()
           .single();
 
-        if (questionError) {
-          console.error('Error saving question:', questionError);
-          return false;
-        }
+        if (sectionError) throw sectionError;
 
-        // Save answers if they exist
-        if (question.answers) {
-          const { error: answersError } = await supabase
-            .from('answers')
-            .upsert(
-              question.answers.map(answer => ({
-                ...answer,
-                question_id: savedQuestion.id
-              }))
-            );
+        // Save questions for this section
+        for (const question of section.questions) {
+          const { data: savedQuestion, error: questionError } = await supabase
+            .from('questions')
+            .insert({
+              section_id: savedSection.id,
+              text: question.text,
+              type: question.type,
+              points: question.points,
+              order_index: question.order_index
+            })
+            .select()
+            .single();
 
-          if (answersError) {
-            console.error('Error saving answers:', answersError);
-            return false;
-          }
-        }
+          if (questionError) throw questionError;
 
-        // Save media if they exist
-        if (question.media) {
-          const { error: mediaError } = await supabase
-            .from('media')
-            .upsert(
-              question.media.map(media => ({
-                ...media,
-                question_id: savedQuestion.id
-              }))
-            );
+          // Save answers if they exist
+          if (question.answers) {
+            const answersToInsert = question.answers.map((answer: Answer, index: number) => ({
+              question_id: savedQuestion.id,
+              text: answer.text,
+              is_correct: answer.is_correct,
+              order_index: index
+            }));
 
-          if (mediaError) {
-            console.error('Error saving media:', mediaError);
-            return false;
+            const { error: answersError } = await supabase
+              .from('answers')
+              .insert(answersToInsert);
+
+            if (answersError) throw answersError;
           }
         }
       }
-    }
 
-    return true;
+      return exam.id;
+    } catch (error) {
+      console.error('Error in createExamFromFile:', error);
+      throw error;
+    }
   }
 
-  // Get exam by ID
   static async getExamById(examId: string): Promise<Exam | null> {
-    // Fetch exam
-    const { data: exam, error: examError } = await supabase
-      .from('exams')
-      .select('*')
-      .eq('id', examId)
-      .single();
+    try {
+      // Validate examId format
+      if (!examId || typeof examId !== 'string') {
+        throw new Error('Invalid exam ID format');
+      }
 
-    if (examError) {
-      console.error('Error fetching exam:', examError);
-      return null;
-    }
+      // Get basic exam info
+      const { data: exam, error: examError } = await supabase
+        .from('exams')
+        .select('*')
+        .eq('id', examId)
+        .single();
 
-    // Fetch sections
-    const { data: sections, error: sectionsError } = await supabase
-      .from('sections')
-      .select('*')
-      .eq('exam_id', examId)
-      .order('order_index');
+      if (examError) throw examError;
 
-    if (sectionsError) {
-      console.error('Error fetching sections:', sectionsError);
-      return null;
-    }
+      // Get sections
+      const { data: sections, error: sectionsError } = await supabase
+        .from('sections')
+        .select('*')
+        .eq('exam_id', examId)
+        .order('order_index');
 
-    // Fetch questions, answers, and media for each section
-    const fullSections = await Promise.all(
-      sections.map(async (section) => {
-        const { data: questions, error: questionsError } = await supabase
-          .from('questions')
-          .select('*')
-          .eq('section_id', section.id)
-          .order('order_index');
+      if (sectionsError) throw sectionsError;
 
-        if (questionsError) {
-          console.error('Error fetching questions:', questionsError);
-          return section;
-        }
+      // Get questions and answers for each section
+      const fullSections = await Promise.all(
+        sections.map(async (section) => {
+          const { data: questions, error: questionsError } = await supabase
+            .from('questions')
+            .select('*')
+            .eq('section_id', section.id)
+            .order('order_index');
 
-        const fullQuestions = await Promise.all(
-          questions.map(async (question) => {
-            const [answersResult, mediaResult] = await Promise.all([
-              supabase
+          if (questionsError) throw questionsError;
+
+          const fullQuestions = await Promise.all(
+            questions.map(async (question) => {
+              const { data: answers, error: answersError } = await supabase
                 .from('answers')
                 .select('*')
                 .eq('question_id', question.id)
-                .order('order_index'),
-              supabase
-                .from('media')
-                .select('*')
-                .eq('question_id', question.id)
-            ]);
+                .order('order_index');
 
-            return {
-              ...question,
-              answers: answersResult.data || [],
-              media: mediaResult.data || []
-            };
-          })
-        );
+              if (answersError) throw answersError;
 
-        return {
-          ...section,
-          questions: fullQuestions
-        };
-      })
-    );
+              return { ...question, answers };
+            })
+          );
 
-    return {
-      ...exam,
-      sections: fullSections
-    };
+          return { ...section, questions: fullQuestions };
+        })
+      );
+
+      return { ...exam, sections: fullSections };
+    } catch (error) {
+      console.error('Error in getExamById:', error);
+      return null;
+    }
   }
 
-  // Get user exams
-  static async getUserExams(userId: string): Promise<Exam[]> {
-    const { data, error } = await supabase
-      .from('exams')
-      .select('*')
-      .eq('created_by', userId)
-      .order('created_at', { ascending: false });
+  static async updateExam(examId: string, updates: Partial<Exam>): Promise<boolean> {
+    try {
+      const { error } = await supabase
+        .from('exams')
+        .update(updates)
+        .eq('id', examId);
 
-    if (error) {
-      console.error('Error fetching user exams:', error);
+      if (error) throw error;
+      return true;
+    } catch (error) {
+      console.error('Error in updateExam:', error);
+      return false;
+    }
+  }
+
+  static async deleteExam(examId: string): Promise<boolean> {
+    try {
+      const { error } = await supabase
+        .from('exams')
+        .delete()
+        .eq('id', examId);
+
+      if (error) throw error;
+      return true;
+    } catch (error) {
+      console.error('Error in deleteExam:', error);
+      return false;
+    }
+  }
+
+  static async getUserExams(userId: string): Promise<Exam[]> {
+    try {
+      const { data, error } = await supabase
+        .from('exams')
+        .select('*')
+        .eq('created_by', userId)
+        .order('created_at', { ascending: false });
+
+      if (error) throw error;
+      return data || [];
+    } catch (error) {
+      console.error('Error in getUserExams:', error);
       return [];
     }
-
-    return data;
   }
 
-  // Delete exam
-  static async deleteExam(examId: string): Promise<boolean> {
-    const { error } = await supabase
-      .from('exams')
-      .delete()
-      .eq('id', examId);
+  static async evaluateAnswer(
+    questionId: string,
+    answer: string | string[]
+  ): Promise<{
+    score: number;
+    feedback: string;
+    correctAnswer?: string | string[];
+  }> {
+    try {
+      const response = await fetch(`${this.API_URL}/api/evaluate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ questionId, answer })
+      });
 
-    if (error) {
-      console.error('Error deleting exam:', error);
-      return false;
+      if (!response.ok) throw new Error('Failed to evaluate answer');
+
+      return await response.json();
+    } catch (error) {
+      console.error('Error in evaluateAnswer:', error);
+      throw error;
     }
-
-    return true;
   }
 
-  // Update exam alias
-  static async updateExamAlias(examId: string, newAlias: string): Promise<boolean> {
-    const { error } = await supabase
-      .from('exams')
-      .update({ alias: newAlias })
-      .eq('id', examId);
+  static async publishExam(examId: string): Promise<boolean> {
+    try {
+      const { error } = await supabase
+        .from('exams')
+        .update({ is_published: true })
+        .eq('id', examId);
 
-    if (error) {
-      console.error('Error updating exam alias:', error);
+      if (error) throw error;
+      return true;
+    } catch (error) {
+      console.error('Error in publishExam:', error);
       return false;
     }
-
-    return true;
   }
 }
+
+export type {
+  ExamSettings,
+  ExamDetails,
+  Exam,
+  Section,
+  Question,
+  Answer
+};

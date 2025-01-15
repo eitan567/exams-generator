@@ -1,15 +1,14 @@
 import React, { useState } from 'react';
-import { useAuth } from './contexts/AuthContext';
-import { Menu, LogOut, LogIn } from 'lucide-react';
-import { Avatar, AvatarFallback, AvatarImage } from './components/ui/Avatar';
+import { useAuth } from '../../contexts/AuthContext';
+import { LogOut, LogIn } from 'lucide-react';
+import { Avatar, AvatarFallback, AvatarImage } from '../ui/Avatar';
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
-  DropdownMenuSeparator,
   DropdownMenuTrigger,
-} from "./components/ui/dropdown-menu";
-import Login from './Login';
+} from "../ui/dropdown-menu";
+import Login from '../../Login';
 
 const Navbar = () => {
   const { user, signOut } = useAuth();
@@ -28,26 +27,24 @@ const Navbar = () => {
       <nav className="bg-white shadow-sm fixed w-full top-0 z-50">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between items-center h-16">
-            {/* Logo/Brand */}
-            <div className="flex-shrink-0 flex items-center">
+            <div className="flex-1">
               <h1 className="text-xl font-bold text-gray-800">מערכת מבחנים</h1>
             </div>
 
-            {/* User Menu */}
-            <div className="flex items-center space-x-4 space-x-reverse">
+            <div className="flex items-center gap-4">
               {user ? (
                 <DropdownMenu>
-                  <DropdownMenuTrigger className="flex items-center space-x-3 space-x-reverse focus:outline-none">
+                  <DropdownMenuTrigger className="flex items-center gap-3 focus:outline-none">
                     <Avatar className="h-8 w-8">
                       <AvatarImage src={user.user_metadata?.avatar_url} />
                       <AvatarFallback>{user.email?.charAt(0).toUpperCase()}</AvatarFallback>
                     </Avatar>
-                    <span className="text-sm font-medium text-gray-700">
+                    <span className="text-sm font-medium text-gray-700 hidden sm:inline">
                       {user.email}
                     </span>
                   </DropdownMenuTrigger>
                   <DropdownMenuContent align="end" className="w-56">
-                    <DropdownMenuItem className="text-red-600 rtl" onClick={handleLogout}>
+                    <DropdownMenuItem onClick={handleLogout}>
                       <LogOut className="ml-2 h-4 w-4" />
                       <span>התנתק</span>
                     </DropdownMenuItem>
@@ -67,7 +64,6 @@ const Navbar = () => {
         </div>
       </nav>
 
-      {/* Login Modal */}
       {showLoginModal && !user && (
         <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center">
           <div className="bg-white rounded-lg p-6 max-w-md w-full mx-4">
@@ -76,8 +72,7 @@ const Navbar = () => {
         </div>
       )}
 
-      {/* Content Spacer */}
-      <div className="h-16" />
+      <div className="h-16" /> {/* Spacer for fixed navbar */}
     </>
   );
 };

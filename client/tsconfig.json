@@ -21,7 +21,8 @@
     "jsx": "react-jsx",  // This is the key setting to fix your JSX errors
     "baseUrl": "src",
     "paths": {
-      "@components/*": ["components/*"]
+      "@components/*": ["./src/components/*"],
+      "@/*": ["./src/*"]
     }
   },
   "include": [

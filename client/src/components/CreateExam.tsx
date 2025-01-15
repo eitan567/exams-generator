@@ -162,13 +162,20 @@ export const CreateExam: React.FC<CreateExamProps> = ({ onCancel, onExamCreated 
         </button>
         <button
           onClick={async () => {
+            if (!uploadedFile) {
+              return;
+            }
             setCurrentStep('creating');
             try {
               // כאן תהיה הקריאה ליצירת הבחינה
               await ExamService.createExam({
-                ...examDetails,
+                file: uploadedFile,
                 settings: examSettings,
-                file: uploadedFile
+                title: examDetails.title,
+                description: examDetails.description,
+                subject: examDetails.subject,
+                grade_level: examDetails.grade_level,
+                alias: examDetails.alias
               });
               onExamCreated();
             } catch (error) {

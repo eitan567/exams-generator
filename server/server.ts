@@ -35,10 +35,22 @@ interface ExamOptions {
   questionsPerSection: number;
 }
 
+interface UploadedFile {
+  id: string;
+  filename: string;
+  path: string;
+  content?: string;
+}
+
 const app = express();
 
-// Add middleware
-app.use(cors());
+// Update CORS configuration to allow multiple origins
+app.use(cors({
+  origin: ['http://localhost:3000', 'http://localhost:3001'],
+  methods: ['GET', 'POST'],
+  allowedHeaders: ['Content-Type', 'Authorization']
+}));
+
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
@@ -236,88 +248,165 @@ async function processChunk(chunk: string, options: any, part: number, total: nu
   }
 }
 
-// Add this endpoint to your server.ts file
+// Store uploaded files temporarily (in production, use a database)
+const uploadedFiles = new Map<string, UploadedFile>();
+
+// Modify the upload endpoint to only handle file upload
+app.post('/api/upload', upload.single('file'), async (req: express.Request, res: express.Response) => {
+  try {
+    if (!req.file) {
+      throw new Error('No file uploaded');
+    }
+
+    const fileId = Date.now().toString();
+    const fileData: UploadedFile = {
+      id: fileId,
+      filename: req.file.originalname,
+      path: req.file.path
+    };
+
+    uploadedFiles.set(fileId, fileData);
+
+    res.json({ 
+      success: true, 
+      fileId,
+      filename: req.file.originalname 
+    });
+
+  } catch (error) {
+    console.error('Upload error:', error);
+    res.status(500).json({ 
+      error: 'Failed to upload file', 
+      details: error instanceof Error ? error.message : 'Unknown error'
+    });
+  }
+});
+
+// Move the exam generation logic into a reusable function
+async function generateExam(fileData: UploadedFile, options: ExamOptions): Promise<ExamData> {
+  // Extract text from file if not already extracted
+  if (!fileData.content) {
+    const fileExtension = path.extname(fileData.filename).toLowerCase();
+    fileData.content = await extractTextFromFile(fileData.path, fileExtension);
+  }
+
+  // Split content into chunks
+  const chunks = splitTextIntoChunks(fileData.content);
+
+  // Process chunks
+  const results = await Promise.all(
+    chunks.map((chunk, index) => processChunk(chunk, options, index + 1, chunks.length))
+  );
+
+  // Combine results
+  return {
+    title: "מבחן",
+    sections: results.flatMap(result => result.sections)
+  };
+}
+
+// Modify create exam endpoint to use the function directly
+app.post('/api/create-exam', upload.single('file'), async (req: express.Request, res: express.Response) => {
+  try {
+    if (!req.file) {
+      throw new Error('No file uploaded');
+    }
+
+    const options = JSON.parse(req.body.options);
+    const fileData: UploadedFile = {
+      id: Date.now().toString(),
+      filename: req.file.originalname,
+      path: req.file.path
+    };
+
+    // Generate exam content directly
+    const examData = await generateExam(fileData, options);
+    
+    res.json({ 
+      success: true,
+      exam: examData
+    });
+
+  } catch (error) {
+    console.error('Error creating exam:', error);
+    res.status(500).json({ 
+      error: 'Failed to create exam', 
+      details: error instanceof Error ? error.message : 'Unknown error'
+    });
+  }
+});
+
+// Remove the redundant /api/generate-exam endpoint since its functionality 
+// is now integrated into create-exam
+
+// Modify alias generation to use fileId
 app.post('/api/generate-alias', async (req: express.Request, res: express.Response) => {
   try {
-    const { content } = req.body;
+    const { fileId } = req.body;
     
-    if (!content) {
-      return res.status(400).json({ error: 'Content is required' });
+    const fileData = uploadedFiles.get(fileId);
+    if (!fileData) {
+      throw new Error('File not found');
+    }
+
+    // Extract content if not already extracted
+    if (!fileData.content) {
+      const fileExtension = path.extname(fileData.filename).toLowerCase();
+      fileData.content = await extractTextFromFile(fileData.path, fileExtension);
     }
 
     const completion = await openai.chat.completions.create({
       messages: [
         {
           role: "system",
-          content: "You are an expert at creating short, descriptive Hebrew titles for exams. Create a title that captures the main subject and level of the exam."
+          content: "You are an expert at creating exam titles and descriptions in Hebrew. Return only valid JSON with exactly two fields: title (2-5 words) and description (1-2 sentences)."
         },
         {
           role: "user",
-          content: `Generate a short, descriptive Hebrew alias (2-5 words) for an exam with the following content: ${content}`
+          content: `Based on this exam content, generate a short Hebrew title and brief description:
+          Content: ${fileData.content.substring(0, 500)}...
+          
+          Return as JSON with this structure:
+          {
+            "title": "short title here",
+            "description": "brief description here"
+          }`
         }
       ],
       model: "deepseek-chat",
     });
 
-    const alias = completion.choices[0]?.message?.content || 'מבחן חדש';
-    res.json({ alias });
+    const content = completion.choices[0]?.message?.content;
+    if (!content) {
+      throw new Error('No content received from API');
+    }
+
+    // Parse and validate the response
+    const cleanedContent = cleanJsonResponse(content);
+    const metadata = JSON.parse(cleanedContent);
+
+    if (!metadata.title || !metadata.description) {
+      throw new Error('Invalid AI response format');
+    }
+
+    res.json({
+      title: metadata.title,
+      description: metadata.description
+    });
     
   } catch (error) {
-    console.error('Error generating alias:', error);
+    console.error('Error generating metadata:', error);
     res.status(500).json({ 
-      error: 'Failed to generate alias', 
+      error: 'Failed to generate exam metadata', 
       details: error instanceof Error ? error.message : 'Unknown error'
     });
   }
 });
 
-app.post('/api/upload', upload.single('file'), async (req: express.Request, res: express.Response): Promise<void> => {
-  try {
-    if (!req.file) {
-      throw new Error('No file uploaded');
-    }
-
-    const fileExtension = path.extname(req.file.originalname).toLowerCase();
-    const { data: options, error } = safeJSONParse(req.body.options);
-
-    if (error) {
-      console.error('Invalid JSON format:', error);
-      res.status(400).json({ error: 'Invalid JSON format in request body' });
-      return;
-    }
-
-    // Extract text from the file using officeparser
-    console.log('Extracting text from file...');
-    const fileContent = await extractTextFromFile(req.file.path, fileExtension);
-    console.log('Text extracted successfully');
-
-    // Split content into chunks that fit within token limits
-    const chunks = splitTextIntoChunks(fileContent);
-    console.log(`Split content into ${chunks.length} chunks`);
-
-    // Process all chunks in parallel
-    const chunkPromises = chunks.map((chunk, index) => 
-      processChunk(chunk, options, index + 1, chunks.length)
-    );
-
-    const results = await Promise.all(chunkPromises);
-
-    // Combine all results
-    const finalExam: ExamData = {
-      title: "מבחן",
-      sections: results.flatMap(result => result.sections)
-    };
-
-    console.log('Final exam generated successfully');
-    res.json(finalExam);
-
-  } catch (error) {
-    console.error('Error:', error);
-    res.status(500).json({ 
-      error: 'Failed to generate exam', 
-      details: error instanceof Error ? error.message : 'Unknown error'
-    });
-  }
+app.get('/api/test', async (req: express.Request, res: express.Response) => { 
+   console.log('/api/test reached');
+   res.json("test");
+   return;
 });
 
 app.post('/api/evaluate', async (req: express.Request, res: express.Response) => {
