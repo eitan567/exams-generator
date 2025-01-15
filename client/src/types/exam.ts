@@ -15,6 +15,7 @@ export interface Answer {
   is_correct?: boolean;
   order_index: number;
   created_at: string;
+  is_ai_generated: boolean; // Add this field
 }
 
 export interface Question {
@@ -28,6 +29,7 @@ export interface Question {
   answers?: Answer[];
   media?: ExamMedia[];
   correctAnswers?: string[]; // For storing correct answers
+  is_ai_generated: boolean; // Add this field
 }
 
 export interface Section {

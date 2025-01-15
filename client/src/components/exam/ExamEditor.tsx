@@ -1,6 +1,6 @@
 // src/components/exam/ExamEditor.tsx
 import React, { useState } from 'react';
-import { Exam, Question } from '../../types/exam';
+import { Exam, Question, Answer } from '../../types/exam';
 import { Card, CardContent } from '../ui/card';
 import { Button } from '../ui/button';
 import { Loader2 } from 'lucide-react';
@@ -14,6 +14,7 @@ export const ExamEditor: React.FC<ExamEditorProps> = ({ exam, onExamUpdate }) =>
   const [saving, setSaving] = useState(false);
   const [isDirty, setIsDirty] = useState(false);
   const [localExam, setLocalExam] = useState<Exam>(exam);
+  const [changedQuestions, setChangedQuestions] = useState<Set<string>>(new Set());
 
   const handleQuestionUpdate = (
     sectionIndex: number,
@@ -24,6 +25,57 @@ export const ExamEditor: React.FC<ExamEditorProps> = ({ exam, onExamUpdate }) =>
     updatedExam.sections[sectionIndex].questions[questionIndex] = updatedQuestion;
     setIsDirty(true);
     setLocalExam(updatedExam);
+    setChangedQuestions((prev) => new Set(prev).add(updatedQuestion.id));
+  };
+
+  const handleAddQuestion = (sectionIndex: number) => {
+    const newQuestion: Question = {
+      id: `new-${Date.now()}`,
+      section_id: localExam.sections[sectionIndex].id,
+      text: '',
+      type: 'single-choice',
+      points: 0,
+      order_index: localExam.sections[sectionIndex].questions.length,
+      created_at: new Date().toISOString(),
+      answers: [],
+      is_ai_generated: false
+    };
+    const updatedExam = { ...localExam };
+    updatedExam.sections[sectionIndex].questions.push(newQuestion);
+    setIsDirty(true);
+    setLocalExam(updatedExam);
+  };
+
+  const handleAddAnswer = (sectionIndex: number, questionIndex: number) => {
+    const newAnswer: Answer = {
+      id: `new-${Date.now()}`,
+      question_id: localExam.sections[sectionIndex].questions[questionIndex].id,
+      text: '',
+      is_correct: false,
+      order_index: localExam.sections[sectionIndex].questions[questionIndex].answers?.length || 0,
+      created_at: new Date().toISOString(),
+      is_ai_generated: false
+    };
+    const updatedExam = { ...localExam };
+    updatedExam.sections[sectionIndex].questions[questionIndex].answers!.push(newAnswer);
+    setIsDirty(true);
+    setLocalExam(updatedExam);
+    setChangedQuestions((prev) => new Set(prev).add(localExam.sections[sectionIndex].questions[questionIndex].id));
+  };
+
+  const handleDeleteQuestion = (sectionIndex: number, questionIndex: number) => {
+    const updatedExam = { ...localExam };
+    updatedExam.sections[sectionIndex].questions.splice(questionIndex, 1);
+    setIsDirty(true);
+    setLocalExam(updatedExam);
+  };
+
+  const handleDeleteAnswer = (sectionIndex: number, questionIndex: number, answerIndex: number) => {
+    const updatedExam = { ...localExam };
+    updatedExam.sections[sectionIndex].questions[questionIndex].answers!.splice(answerIndex, 1);
+    setIsDirty(true);
+    setLocalExam(updatedExam);
+    setChangedQuestions((prev) => new Set(prev).add(localExam.sections[sectionIndex].questions[questionIndex].id));
   };
 
   const handleSaveChanges = async () => {
@@ -91,79 +143,101 @@ export const ExamEditor: React.FC<ExamEditorProps> = ({ exam, onExamUpdate }) =>
 
             {/* Questions */}
             <div className="space-y-6">
-              {section.questions.map((question, questionIndex) => (
-                <div key={question.id} className="border rounded-lg p-4">
-                  <div className="flex items-start space-x-4 space-x-reverse">
-                    <span className="font-medium text-gray-700 ml-2">
-                      {questionIndex + 1}.
-                    </span>
-                    <div className="flex-1 space-y-4">
-                      {/* Question text */}
-                      <textarea
-                        value={question.text}
-                        onChange={(e) => {
-                          const updatedQuestion = { ...question, text: e.target.value };
-                          handleQuestionUpdate(sectionIndex, questionIndex, updatedQuestion);
-                        }}
-                        className="w-full border rounded p-2"
-                        rows={2}
-                      />
-
-                      {/* Answers if multiple choice or single choice */}
-                      {question.answers && (
-                        <div className="space-y-2 mr-6">
-                          {question.answers.map((answer, answerIndex) => (
-                            <div key={answerIndex} className="flex items-center space-x-2 space-x-reverse">
-                              <span className="text-gray-600">
-                                {String.fromCharCode(1488 + answerIndex)}.
-                              </span>
-                              <input
-                                type="text"
-                                value={answer.text}
-                                onChange={(e) => {
-                                  const updatedQuestion = { ...question };
-                                  updatedQuestion.answers![answerIndex].text = e.target.value;
-                                  handleQuestionUpdate(sectionIndex, questionIndex, updatedQuestion);
-                                }}
-                                className="flex-1 border rounded p-1"
-                              />
-                              <input
-                                type={question.type === 'single-choice' ? 'radio' : 'checkbox'}
-                                checked={answer.is_correct}
-                                onChange={(e) => {
-                                  const updatedQuestion = { ...question };
-                                  updatedQuestion.answers![answerIndex].is_correct = e.target.checked;
-                                  handleQuestionUpdate(sectionIndex, questionIndex, updatedQuestion);
-                                }}
-                                className={question.type === 'single-choice' ? 
-                                  "form-radio h-5 w-5 text-blue-600 ml-2" : 
-                                  "form-checkbox h-5 w-5 text-blue-600 rounded ml-2"
-                                }
-                              />
-                            </div>
-                          ))}
-                        </div>
-                      )}
-
-                      {/* Points */}
-                      <div className="flex items-center space-x-2 space-x-reverse">
-                        <span className="text-sm text-gray-600">ניקוד:</span>
-                        <input
-                          type="number"
-                          value={question.points}
+              {section.questions.map((question, questionIndex) => {
+                const isQuestionChanged = !question.is_ai_generated || question.text !== exam.sections[sectionIndex].questions[questionIndex].text;
+                return (
+                  <div key={question.id} className="border rounded-lg p-4">
+                    <div className="flex items-start space-x-4 space-x-reverse">
+                      <span className="font-medium text-gray-700 ml-2">
+                        {questionIndex + 1}.
+                      </span>
+                      <div className="flex-1 space-y-4">
+                        {/* Question text */}
+                        <textarea
+                          value={question.text}
                           onChange={(e) => {
-                            const updatedQuestion = { ...question, points: Number(e.target.value) };
+                            const updatedQuestion = { ...question, text: e.target.value, is_ai_generated: false };
                             handleQuestionUpdate(sectionIndex, questionIndex, updatedQuestion);
                           }}
-                          className="w-20 border rounded p-1"
-                          min={0}
-                          max={100}
+                          className="w-full border rounded p-2"
+                          rows={2}
                         />
+
+                        {/* Answers if multiple choice or single choice */}
+                        {question.answers && (
+                          <div className="space-y-2 mr-6">
+                            {question.answers.map((answer, answerIndex) => {
+                              const isAnswerChanged = !answer.is_ai_generated || answer.text !== exam.sections[sectionIndex].questions[questionIndex].answers![answerIndex].text;
+                              return (
+                                <div key={answer.id} className="flex items-center space-x-2 space-x-reverse">
+                                  <span className="text-gray-600">
+                                    {String.fromCharCode(1488 + answerIndex)}.
+                                  </span>
+                                  <input
+                                    type="text"
+                                    value={answer.text}
+                                    onChange={(e) => {
+                                      const updatedQuestion = { ...question };
+                                      updatedQuestion.answers![answerIndex].text = e.target.value;
+                                      updatedQuestion.answers![answerIndex].is_ai_generated = false;
+                                      handleQuestionUpdate(sectionIndex, questionIndex, updatedQuestion);
+                                    }}
+                                    className="flex-1 border rounded p-1"
+                                  />
+                                  <input
+                                    type={question.type === 'single-choice' ? 'radio' : 'checkbox'}
+                                    name={`question-${question.id}`}
+                                    checked={answer.is_correct}
+                                    onChange={(e) => {
+                                      const updatedQuestion = { ...question };
+                                      updatedQuestion.answers![answerIndex].is_correct = e.target.checked;
+                                      updatedQuestion.answers![answerIndex].is_ai_generated = false;
+                                      handleQuestionUpdate(sectionIndex, questionIndex, updatedQuestion);
+                                    }}
+                                    disabled={!changedQuestions.has(question.id)}
+                                    className={question.type === 'single-choice' ? 
+                                      "form-radio h-5 w-5 text-blue-600 ml-2" : 
+                                      "form-checkbox h-5 w-5 text-blue-600 rounded ml-2"
+                                    }
+                                  />
+                                  <Button variant="destructive" onClick={() => handleDeleteAnswer(sectionIndex, questionIndex, answerIndex)}>
+                                    מחק תשובה
+                                  </Button>
+                                </div>
+                              );
+                            })}
+                            <Button onClick={() => handleAddAnswer(sectionIndex, questionIndex)}>
+                              הוסף תשובה
+                            </Button>
+                          </div>
+                        )}
+
+                        {/* Points */}
+                        <div className="flex items-center space-x-2 space-x-reverse">
+                          <span className="text-sm text-gray-600">ניקוד:</span>
+                          <input
+                            type="number"
+                            value={question.points}
+                            onChange={(e) => {
+                              const updatedQuestion = { ...question, points: Number(e.target.value) };
+                              handleQuestionUpdate(sectionIndex, questionIndex, updatedQuestion);
+                            }}
+                            className="w-20 border rounded p-1"
+                            min={0}
+                            max={100}
+                          />
+                        </div>
                       </div>
+                      <Button variant="destructive" onClick={() => handleDeleteQuestion(sectionIndex, questionIndex)}>
+                        מחק שאלה
+                      </Button>
                     </div>
                   </div>
-                </div>
-              ))}
+                );
+              })}
+              <Button onClick={() => handleAddQuestion(sectionIndex)}>
+                הוסף שאלה
+              </Button>
             </div>
           </CardContent>
         </Card>
