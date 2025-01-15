@@ -37,13 +37,22 @@ export const ExamEditor: React.FC<ExamEditorProps> = ({ exam, onExamUpdate }) =>
       points: 0,
       order_index: localExam.sections[sectionIndex].questions.length,
       created_at: new Date().toISOString(),
-      answers: [],
+      answers: Array.from({ length: 4 }, (_, index) => ({
+        id: `new-answer-${Date.now()}-${index}`,
+        question_id: `new-${Date.now()}`,
+        text: '',
+        is_correct: false,
+        order_index: index,
+        created_at: new Date().toISOString(),
+        is_ai_generated: false
+      })),
       is_ai_generated: false
     };
     const updatedExam = { ...localExam };
     updatedExam.sections[sectionIndex].questions.push(newQuestion);
     setIsDirty(true);
     setLocalExam(updatedExam);
+    setChangedQuestions((prev) => new Set(prev).add(newQuestion.id));
   };
 
   const handleAddAnswer = (sectionIndex: number, questionIndex: number) => {
