@@ -127,14 +127,17 @@ export const ExamEditor: React.FC<ExamEditorProps> = ({ exam, onExamUpdate }) =>
                                 className="flex-1 border rounded p-1"
                               />
                               <input
-                                type="checkbox"
+                                type={question.type === 'single-choice' ? 'radio' : 'checkbox'}
                                 checked={answer.is_correct}
                                 onChange={(e) => {
                                   const updatedQuestion = { ...question };
                                   updatedQuestion.answers![answerIndex].is_correct = e.target.checked;
                                   handleQuestionUpdate(sectionIndex, questionIndex, updatedQuestion);
                                 }}
-                                className="form-checkbox h-4 w-4 text-blue-600"
+                                className={question.type === 'single-choice' ? 
+                                  "form-radio h-5 w-5 text-blue-600 ml-2" : 
+                                  "form-checkbox h-5 w-5 text-blue-600 rounded ml-2"
+                                }
                               />
                             </div>
                           ))}

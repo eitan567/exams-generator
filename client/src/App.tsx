@@ -7,6 +7,7 @@ import Dashboard from './components/pages/Dashboard';
 import ExamView from './components/pages/ExamView';
 import { Toaster } from "./components/ui/toaster";
 import Login from 'Login';
+import LandingPage from './components/pages/LandingPage';
 
 export function App() {
   const { user } = useAuth();
@@ -17,13 +18,14 @@ export function App() {
         <Navbar />
         <div className="p-6 pt-20"> {/* Added padding-top to account for fixed navbar */}
           <Routes>
+            <Route path="/" element={<LandingPage />} />
             <Route 
-              path="/" 
-              element={user ? <Dashboard /> : <Navigate to="/login" replace />} 
+              path="/dashboard" 
+              element={user ? <Dashboard /> : <Navigate to="/" replace />} 
             />
             <Route 
               path="/exam/:examId" 
-              element={user ? <ExamView /> : <Navigate to="/login" replace />} 
+              element={user ? <ExamView /> : <Navigate to="/" replace />} 
             />
             <Route 
               path="/login" 

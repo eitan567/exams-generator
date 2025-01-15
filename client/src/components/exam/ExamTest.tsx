@@ -93,7 +93,10 @@ export const ExamTest: React.FC<ExamTestProps> = ({ exam, onSubmit }) => {
                                   question.type as 'single-choice' | 'multiple-choice',
                                   e.target.checked
                                 )}
-                                className="form-checkbox h-5 w-5 text-blue-600"
+                                className={question.type === 'single-choice' ? 
+                                  "form-radio h-5 w-5 text-blue-600 ml-2" : 
+                                  "form-checkbox h-5 w-5 text-blue-600 rounded ml-2"
+                                }
                               />
                               <span className="mr-2">{getHebrewLetter(aIndex)}.</span>
                               <span>{answer.text}</span>
