@@ -40,7 +40,7 @@ const Dashboard = () => {
       {/* Exams List Section */}
       <section>
         <ExamList 
-          onExamSelect={(examId) => navigate(`/exam/${examId}`)} 
+          onExamSelect={(examId: string) => navigate(`/exam/${examId}`)}  // שינוי כאן - הבהרת הטיפוס וקבלת examId כמחרוזת
         />
       </section>
 

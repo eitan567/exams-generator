@@ -18,7 +18,7 @@ interface ExamResult {
 }
 
 const ExamView = () => {
-  const { examId } = useParams<{ examId: string }>();
+  const params = useParams<{ examId: string }>();
   const navigate = useNavigate();
   const { toast } = useToast();
   
@@ -28,14 +28,21 @@ const ExamView = () => {
   const [examResults, setExamResults] = useState<ExamResult[] | null>(null);
 
   useEffect(() => {
-    loadExam();
-  }, [examId]);
+    // Extract and validate examId
+    const examId = params?.examId;
+    if (!examId) {
+      navigate('/');
+      return;
+    }
 
-  const loadExam = async () => {
-    if (!examId) return;
-    
+    // Ensure examId is a string before passing to loadExam
+    loadExam(String(examId));
+  }, [params]);
+
+  const loadExam = async (id: string) => {
+    setLoading(true);
     try {
-      const examData = await ExamService.getExamById(examId);
+      const examData = await ExamService.getExamById(id);
       if (examData) {
         // Make sure the exam data has all required fields
         const completeExam: Exam = {
@@ -65,7 +72,7 @@ const ExamView = () => {
 
   const handleExamUpdate = async (updatedExam: Exam) => {
     try {
-      const success = await ExamService.updateExam(examId!, updatedExam);
+      const success = await ExamService.updateExam(params.examId!, updatedExam);
       if (success) {
         setExam(updatedExam);
         toast({

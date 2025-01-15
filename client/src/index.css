@@ -93,6 +93,21 @@
   .input-field {
     text-align: right;
   }
+
+  /* Add these rules for tabs */
+  .tabs-list {
+    flex-direction: row-reverse;
+  }
+
+  .tabs-trigger {
+    margin-left: 0;
+    margin-right: 0;
+  }
+}
+
+/* Add TabsList specific RTL styles */
+[role="tablist"] {
+  direction: rtl;
 }
 
 /* File input customization */

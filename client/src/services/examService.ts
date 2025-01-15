@@ -244,27 +244,30 @@ export class ExamService {
     }
   }
 
-  static async getExamById(examId: string): Promise<Exam | null> {
+  static async getExamById(examId: string | number): Promise<Exam | null> {
     try {
-      // Validate examId format
-      if (!examId || typeof examId !== 'string') {
-        throw new Error('Invalid exam ID format');
+      // Ensure examId is a string
+      const id = typeof examId === 'object' ? null : String(examId);
+      
+      if (!id) {
+        throw new Error('Invalid exam ID');
       }
 
-      // Get basic exam info
+      // Get basic exam info using eq instead of match
       const { data: exam, error: examError } = await supabase
         .from('exams')
         .select('*')
-        .eq('id', examId)
+        .eq('id', id)  // Use eq with the string ID
         .single();
 
       if (examError) throw examError;
+      if (!exam) return null;
 
       // Get sections
       const { data: sections, error: sectionsError } = await supabase
         .from('sections')
         .select('*')
-        .eq('exam_id', examId)
+        .eq('exam_id', id)  // Use eq here as well
         .order('order_index');
 
       if (sectionsError) throw sectionsError;

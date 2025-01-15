@@ -5,7 +5,7 @@ import { Exam } from '../types/exam';
 import { Pencil, Trash2, Eye } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 
-export default function ExamList({ onExamSelect }: { onExamSelect: (exam: Exam) => void }) {
+export default function ExamList({ onExamSelect }: { onExamSelect: (examId: string) => void }) {
   const { user } = useAuth();
   const [exams, setExams] = useState<Exam[]>([]);
   const [loading, setLoading] = useState(true);
@@ -187,7 +187,7 @@ export default function ExamList({ onExamSelect }: { onExamSelect: (exam: Exam) 
                 
                 <div className="flex space-x-2">
                   <button
-                    onClick={() => onExamSelect(exam)}
+                    onClick={() => onExamSelect(exam.id)} // שינוי כאן - העברת רק ה-ID
                     className="p-2 text-blue-600 hover:bg-blue-50 rounded-full"
                     title="ערוך מבחן"
                   >
