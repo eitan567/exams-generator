@@ -13,22 +13,23 @@ interface ExamEditorProps {
 export const ExamEditor: React.FC<ExamEditorProps> = ({ exam, onExamUpdate }) => {
   const [saving, setSaving] = useState(false);
   const [isDirty, setIsDirty] = useState(false);
+  const [localExam, setLocalExam] = useState<Exam>(exam);
 
   const handleQuestionUpdate = (
     sectionIndex: number,
     questionIndex: number,
     updatedQuestion: Question
   ) => {
-    const updatedExam = { ...exam };
+    const updatedExam = { ...localExam };
     updatedExam.sections[sectionIndex].questions[questionIndex] = updatedQuestion;
     setIsDirty(true);
-    onExamUpdate(updatedExam);
+    setLocalExam(updatedExam);
   };
 
   const handleSaveChanges = async () => {
     setSaving(true);
     try {
-      await onExamUpdate(exam);
+      await onExamUpdate(localExam);
       setIsDirty(false);
     } finally {
       setSaving(false);
@@ -57,7 +58,7 @@ export const ExamEditor: React.FC<ExamEditorProps> = ({ exam, onExamUpdate }) =>
         </div>
       )}
 
-      {exam.sections.map((section, sectionIndex) => (
+      {localExam.sections.map((section, sectionIndex) => (
         <Card key={section.id} className="mb-8">
           <CardContent className="p-6">
             {/* Section header */}
@@ -66,10 +67,10 @@ export const ExamEditor: React.FC<ExamEditorProps> = ({ exam, onExamUpdate }) =>
                 type="text"
                 value={section.title}
                 onChange={(e) => {
-                  const updatedExam = { ...exam };
+                  const updatedExam = { ...localExam };
                   updatedExam.sections[sectionIndex].title = e.target.value;
                   setIsDirty(true);
-                  onExamUpdate(updatedExam);
+                  setLocalExam(updatedExam);
                 }}
                 className="text-xl font-bold w-full border-0 focus:ring-2 focus:ring-blue-500 rounded p-1"
               />
@@ -77,10 +78,10 @@ export const ExamEditor: React.FC<ExamEditorProps> = ({ exam, onExamUpdate }) =>
                 <textarea
                   value={section.instructions}
                   onChange={(e) => {
-                    const updatedExam = { ...exam };
+                    const updatedExam = { ...localExam };
                     updatedExam.sections[sectionIndex].instructions = e.target.value;
                     setIsDirty(true);
-                    onExamUpdate(updatedExam);
+                    setLocalExam(updatedExam);
                   }}
                   className="mt-2 w-full border rounded p-2 text-gray-600"
                   rows={2}
