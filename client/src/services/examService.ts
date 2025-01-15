@@ -310,12 +310,54 @@ export class ExamService {
 
   static async updateExam(examId: string, updates: Partial<Exam>): Promise<boolean> {
     try {
-      const { error } = await supabase
+      // Update the exam details excluding sections
+      const { sections, ...examUpdates } = updates;
+      const { error: examError } = await supabase
         .from('exams')
-        .update(updates)
+        .update(examUpdates)
         .eq('id', examId);
 
-      if (error) throw error;
+      if (examError) throw examError;
+
+      // Update sections if provided
+      if (sections) {
+        for (const section of sections) {
+          const { id: sectionId, questions, ...sectionUpdates } = section;
+          const { error: sectionError } = await supabase
+            .from('sections')
+            .update(sectionUpdates)
+            .eq('id', sectionId);
+
+          if (sectionError) throw sectionError;
+
+          // Update questions within the section
+          if (questions) {
+            for (const question of questions) {
+              const { id: questionId, answers, ...questionUpdates } = question;
+              const { error: questionError } = await supabase
+                .from('questions')
+                .update(questionUpdates)
+                .eq('id', questionId);
+
+              if (questionError) throw questionError;
+
+              // Update answers within the question
+              if (answers) {
+                for (const answer of answers) {
+                  const { id: answerId, ...answerUpdates } = answer;
+                  const { error: answerError } = await supabase
+                    .from('answers')
+                    .update(answerUpdates)
+                    .eq('id', answerId);
+
+                  if (answerError) throw answerError;
+                }
+              }
+            }
+          }
+        }
+      }
+
       return true;
     } catch (error) {
       console.error('Error in updateExam:', error);
