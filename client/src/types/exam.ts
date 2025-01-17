@@ -55,3 +55,17 @@ export interface Exam {
   updated_at: string;
   sections: Section[];
 }
+
+export interface ExamResultsProps {
+  exam: Exam;
+  results: ExamResult[];
+}
+
+
+export interface ExamResult {
+  answer: string | string[];
+  questionId: string;
+  score: number;
+  feedback: string;
+  correctAnswer?: string | string[];
+}

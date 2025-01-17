@@ -1,20 +1,10 @@
-// src/components/exam/ExamResults.tsx
 import React from 'react';
-import { Exam } from '../../types/exam';
+import { ExamResultsProps,ExamResult } from '../../types/exam';
 import { Card, CardContent } from '../ui/card';
 import { CheckCircle2, XCircle } from 'lucide-react';
 
-interface ExamResultsProps {
-  exam: Exam;
-  results: Array<{
-    questionId: string;
-    score: number;
-    feedback: string;
-    answer?: string | string[];
-  }>;
-}
-
 export const ExamResults: React.FC<ExamResultsProps> = ({ exam, results }) => {
+  console.log("results :",results);
   // Calculate total score
   const calculateTotalScore = () => {
     let totalPoints = 0;
@@ -23,6 +13,7 @@ export const ExamResults: React.FC<ExamResultsProps> = ({ exam, results }) => {
     exam.sections.forEach(section => {
       section.questions.forEach(question => {
         const result = results.find(r => r.questionId === question.id);
+        console.log("result :",result);
         if (result) {
           totalPoints += question.points;
           earnedPoints += (result.score / 100) * question.points;
@@ -69,6 +60,7 @@ export const ExamResults: React.FC<ExamResultsProps> = ({ exam, results }) => {
             <div className="space-y-8">
               {section.questions.map((question, qIndex) => {
                 const result = results.find(r => r.questionId === question.id);
+                const correctAnswers = question.answers?.filter((ans: any) => ans.is_correct).map((ans: any) => ans.text);
                 if (!result) return null;
 
                 return (
@@ -88,14 +80,35 @@ export const ExamResults: React.FC<ExamResultsProps> = ({ exam, results }) => {
                               </p>
                             ) : (
                               <div className="space-y-1">
-                                {(result.answer as string[]).map((ans, index) => (
+                                {Array.isArray(result.answer) ? (result.answer.map((ans, index) => (
                                   <p key={index} className="flex items-center space-x-2 space-x-reverse">
                                     <span>{getHebrewLetter(index)}.</span>
                                     <span>{ans}</span>
                                   </p>
-                                ))}
+                                ))) : (
+                                  <p className="flex items-center space-x-2 space-x-reverse">                                    
+                                    <span>{result.answer as string}</span>
+                                  </p>                                  
+                                )}
                               </div>
                             )}
+                          </div>
+                          
+                          {/* Correct Answer */}
+                          <div className="mb-4">
+                            <h4 className="text-sm font-medium text-gray-600 mb-2">התשובה הנכונה:</h4>
+                            <div className="space-y-1">
+                              {Array.isArray(correctAnswers) ? (correctAnswers.map((ans, index) => (
+                                <p key={index} className="flex items-center space-x-2 space-x-reverse">
+                                  <span>{getHebrewLetter(index)}.</span>
+                                  <span>{ans}</span>
+                                </p>
+                              ))) : (
+                                <p className="flex items-center space-x-2 space-x-reverse">
+                                  <span>{correctAnswers}</span>
+                                </p>
+                              )}
+                            </div>
                           </div>
 
                           {/* Feedback */}

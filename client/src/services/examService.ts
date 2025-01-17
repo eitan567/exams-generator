@@ -397,7 +397,7 @@ export class ExamService {
   }
 
   static async evaluateAnswer(
-    questionId: string,
+    question: Question,
     answer: string | string[]
   ): Promise<{
     score: number;
@@ -405,21 +405,56 @@ export class ExamService {
     correctAnswer?: string | string[];
   }> {
     try {
-      const response = await fetch(`${this.API_URL}/api/evaluate`, {
+      if (!question.id || !question.type) {
+        throw new Error('Invalid question data');
+      }
+
+      const requestBody = {
+        question: {
+          id: question.id,
+          text: question.text,
+          type: question.type,
+          points: question.points
+        },
+        answer: answer
+      };
+      
+      const apiUrl = process.env.REACT_APP_API_URL || 'http://localhost:5000';
+      console.log('Making request to:', `${apiUrl}/api/evaluate`);
+
+      console.log('Request body:', requestBody);
+
+      const response = await fetch(`${apiUrl}/api/evaluate`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ questionId, answer })
+        headers: { 
+          'Content-Type': 'application/json',
+          'Accept': 'application/json'
+        },
+        body: JSON.stringify(requestBody)
       });
 
-      if (!response.ok) throw new Error('Failed to evaluate answer');
+      console.log('Response status:', response.status);
 
-      return await response.json();
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error('Error response:', errorText);
+        
+        try {
+          const errorData = JSON.parse(errorText);
+          throw new Error(errorData.error || 'Failed to evaluate answer');
+        } catch (e) {
+          throw new Error(`Server error: ${response.status}`);
+        }
+      }
+
+      const result = await response.json();
+      console.log('Evaluation result:', result);
+      return result;
     } catch (error) {
       console.error('Error in evaluateAnswer:', error);
       throw error;
     }
   }
-
   static async publishExam(examId: string): Promise<boolean> {
     try {
       const { error } = await supabase

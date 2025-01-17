@@ -4,9 +4,12 @@
   "scripts": {
     "start": "node -r dotenv/config dist/server.js",
     "dev": "nodemon -r dotenv/config --exec ts-node server.ts",
-    "build": "tsc"
+    "build": "tsc",
+    "debug": "node --inspect-brk -r ts-node/register server.ts",
+    "debug:watch": "nodemon --inspect -r ts-node/register server.ts"
   },
   "dependencies": {
+    "@supabase/supabase-js": "^2.47.14",
     "cors": "^2.8.5",
     "dotenv": "^16.4.7",
     "express": "^4.21.2",

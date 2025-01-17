@@ -23,3 +23,4 @@ export interface EvaluationResult {
 export interface ExamResults {
   [questionId: string]: EvaluationResult;
 }
+

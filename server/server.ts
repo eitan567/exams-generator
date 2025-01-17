@@ -4,11 +4,14 @@ import { OpenAI } from 'openai';
 import cors from 'cors';
 import { readFileSync } from 'fs';
 import path from 'path';
+import { createClient } from '@supabase/supabase-js';
 import pdfParse from 'pdf-parse';
 import { parseOfficeAsync } from 'officeparser';  // Update import
 import mammoth from 'mammoth';
 import textract from 'textract';
 import { promisify } from 'util';
+import dotenv from 'dotenv';
+dotenv.config();
 
 interface Question {
   text: string;
@@ -41,9 +44,15 @@ interface UploadedFile {
   path: string;
   content?: string;
 }
-
 const app = express();
 
+// Initialize Supabase client
+const supabase = createClient(
+  process.env.SUPABASE_URL || '<YOUR_SUPABASE_URL>',
+  process.env.SUPABASE_ANON_KEY || '<YOUR_SUPABASE_ANON_KEY>'
+);
+
+// Update CORS configuration to allow multiple origins
 // Update CORS configuration to allow multiple origins
 app.use(cors({
   origin: ['http://localhost:3000', 'http://localhost:3001'],
@@ -66,7 +75,7 @@ const upload = multer({ storage });
 
 const openai = new OpenAI({
   baseURL: 'https://api.deepseek.com',
-  apiKey: 'sk-0e8e8e6d01934127a89c441bcd5f5327'
+  apiKey: 'sk-ea87ad8a39d44e8ba36c928369358c4d'
 });
 
 function cleanJsonResponse(response: string): string {
@@ -412,98 +421,113 @@ app.get('/api/test', async (req: express.Request, res: express.Response) => {
 app.post('/api/evaluate', async (req: express.Request, res: express.Response) => {
   try {
     const { question, answer } = req.body;
-    
-    if (!question || !answer) {
-      return res.status(400).json({ 
-        error: 'Missing required fields', 
-        received: { question, answer } 
-      });
+    if (!question || !question.id || !answer) {
+      return res.status(400).json({ error: 'Missing question or answer' });
     }
 
-    const prompt = `
-      העריכו את התשובה הבאה לשאלה הנתונה:
-      שאלה: ${question.text}
-      תשובת התלמיד: ${answer}
-      סוג השאלה: ${question.type}
-      ניקוד מלא לשאלה: ${question.points || 0} נקודות
-      
-      אנא ספקו:
-      1. ציון (0-100), לפי הכללים הבאים:
-         - בשאלות בחירה יחידה: 0 או 100 נקודות בלבד
-         - בשאלות בחירה מרובה: הציון יחסי למספר התשובות הנכונות
-         - בשאלות פתוחות: הערכה לפי איכות התשובה
-      
-      2. משוב בעברית המסביר את הציון
-      
-      3. ציינו את התשובה/תשובות הנכונות
-      
-      החזירו אך ורק אובייקט JSON בפורמט הבא:
-      {
-        "score": number,
-        "feedback": "המשוב בעברית",
-        "correctAnswer": "התשובה הנכונה" או ["תשובה 1", "תשובה 2"] למספר תשובות
+    // For single/multiple choice questions
+    if (question.type !== 'open-ended') {
+      const { data: answers, error: aError } = await supabase
+        .from('answers')
+        .select('*')
+        .eq('question_id', question.id);
+
+      if (!aError && answers && answers.length > 0) {
+        const correctAnswers = answers
+          .filter((ans: any) => ans.is_correct)
+          .map((ans: any) => ans.text);
+
+        if (question.type === 'single-choice') {
+          const userAnswer = Array.isArray(answer) ? answer[0] : answer;
+          const isCorrect = correctAnswers.includes(userAnswer);
+          return res.json({
+            score: isCorrect ? 100 : 0,
+            feedback: isCorrect ? 'תשובה נכונה' : 'תשובה שגויה',
+            correctAnswer: correctAnswers[0]
+          });
+        } else { // multiple-choice
+          const userAnswers = Array.isArray(answer) ? answer : [answer];
+          const totalCorrect = correctAnswers.length;
+          const correctCount = userAnswers.filter(ans => correctAnswers.includes(ans)).length;
+          const score = Math.round((correctCount / totalCorrect) * 100);
+
+          return res.json({
+            score,
+            feedback: `זיהית ${correctCount} מתוך ${totalCorrect} תשובות נכונות`,
+            correctAnswer: correctAnswers
+          });
+        }
       }
-    `;
-
-    const completion = await openai.chat.completions.create({
-      messages: [
-        { 
-          role: "system", 
-          content: `You are an expert teacher evaluating exam answers. Follow these strict scoring rules:
-
-          1. For single-choice questions:
-             - Only give scores of 0 or 100 (no partial credit)
-             - If answer is incorrect, score MUST be 0
-             - Include the correct answer in the response
-
-          2. For multiple-choice questions:
-             - Score is proportional to correct answers selected
-             - Example: If there are 3 correct answers and student selected 2, score = 66
-             - List ALL correct answers in the response
-
-          3. For open-ended questions:
-             - Evaluate based on content, accuracy, and completeness
-             - Provide detailed feedback explaining score
-             - Include an example of a complete correct answer
-
-          Always provide feedback in Hebrew only (except for technical terms).
-          Always include the correct answer(s) in the response.
-          Return only valid JSON format.`
-        },
-        { role: "user", content: prompt }
-      ],
-      model: "deepseek-chat",
-    });
-
-    const content = completion.choices[0]?.message?.content;
-    if (!content) {
-      throw new Error('לא התקבלה תשובה מה-API');
     }
 
-    // Clean and parse the response
-    const cleanedContent = cleanJsonResponse(content);
-    console.log('תוכן המשוב המנוקה:', cleanedContent);
+    // For open-ended questions, use AI evaluation
+    const prompt = `עליך להעריך את תשובת התלמיד לשאלה הבאה:
+שאלה: ${question.text}
+תשובת התלמיד: ${answer}
+
+אנא הערך את התשובה וספק:
+1. ציון (0-100)
+2. משוב מפורט בעברית
+3. דוגמה לתשובה נכונה
+
+החזר את התשובה בפורמט JSON הבא:
+{
+  "score": number,
+  "feedback": "משוב מפורט",
+  "correctAnswer": "דוגמה לתשובה נכונה"
+}`;
+
+const completion = await openai.chat.completions.create({
+  messages: [
+    {
+      role: "system",
+      content: "אתה מומחה בהערכת תשובות לשאלות פתוחות. עליך להעריך את התשובה באופן מקצועי ולספק משוב מפורט. הקפד להחזיר תשובה בפורמט JSON בדיוק כמו בדוגמה, ללא תוספות או קוד מיותר."
+    },
+    {
+      role: "user",
+      content: `אנא הערך את תשובת התלמיד הבאה:
+שאלה: ${question.text}
+תשובת התלמיד: ${answer}
+
+יש להחזיר תשובה בדיוק בפורמט הזה:
+{
+"score": 70,
+"feedback": "המשוב כאן",
+"correctAnswer": "תשובה נכונה לדוגמה"
+}`
+    }
+  ],
+  model: "deepseek-chat",
+});
+
+const content = completion.choices[0]?.message?.content;
+if (!content) {
+  throw new Error('No content received from AI');
+}
+
+// Clean any code block markers and extra whitespace
+const cleanedContent = content
+  .replace(/```json/g, '')
+  .replace(/```/g, '')
+  .trim();
+
+// Parse and validate AI response
+const evaluation = JSON.parse(cleanedContent);
+console.log('AI response:', evaluation);
+if (typeof evaluation.score !== 'number' ||
+  !evaluation.feedback ||
+  !evaluation.correctAnswer) {
+  console.log('Invalid response format:', evaluation);
+  throw new Error('Invalid AI response format');
+}
+
+    return res.json(evaluation);
     
-    try {
-      const evaluation = JSON.parse(cleanedContent);
-      
-      // Additional validation for single-choice questions
-      if (question.type === 'single-choice' && evaluation.score !== 0 && evaluation.score !== 100) {
-        evaluation.score = 0;
-        evaluation.feedback = `תשובה שגויה. ${evaluation.feedback}`;
-      }
-
-      res.json(evaluation);
-    } catch (parseError) {
-      console.error('שגיאת ניתוח JSON:', parseError);
-      console.error('התוכן שנכשל בניתוח:', cleanedContent);
-      throw new Error('נכשל בניתוח תשובת ה-API כ-JSON');
-    }
   } catch (error) {
-    console.error('שגיאת הערכה:', error);
-    res.status(500).json({ 
-      error: 'נכשל בהערכת התשובה',
-      details: error instanceof Error ? error.message : 'שגיאה לא ידועה'
+    console.error('Evaluation error:', error);
+    return res.status(500).json({
+      error: 'Failed to evaluate answer',
+      details: error instanceof Error ? error.message : 'Unknown error'
     });
   }
 });

@@ -24,6 +24,8 @@ export const ExamTest: React.FC<ExamTestProps> = ({ exam, onSubmit }) => {
     type: 'single-choice' | 'multiple-choice' | 'open-ended',
     checked?: boolean
   ) => {
+    console.log('Handling answer for question:', { questionId, answer, type, checked });
+    
     if (type === 'open-ended') {
       setAnswers(prev => ({
         ...prev,
@@ -44,6 +46,8 @@ export const ExamTest: React.FC<ExamTestProps> = ({ exam, onSubmit }) => {
         [questionId]: [answer]
       }));
     }
+
+    console.log('Updated answers:', answers);
   };
 
   const handleSubmit = () => {

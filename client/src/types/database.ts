@@ -10,10 +10,13 @@ export interface ExamRecord {
 }
 
 export interface ExamResult {
-  id: string;
-  created_at: string;
-  exam_id: string;
-  user_id: string;
-  answers: { [key: string]: string[] | string };
+  questionId: string;
   score: number;
+  feedback: string;
+  correctAnswer?: string | string[];
+  error?: boolean;
+}
+
+export interface ExamResults {
+  [questionId: string]: ExamResult;
 }

@@ -4,18 +4,10 @@ import { ExamService } from '../../services/examService';
 import ExamEditor from '../exam/ExamEditor';
 import ExamTest from '../exam/ExamTest';
 import { ExamResults } from '../exam/ExamResults';
-import { Exam } from '../../types/exam';
+import { Exam,ExamResult } from '../../types/exam';
 import { Loader2 } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "../ui/tabs";
 import { useToast } from "../ui/use-toast";
-
-// Define the type for exam results
-interface ExamResult {
-  questionId: string;
-  score: number;
-  feedback: string;
-  correctAnswer?: string | string[];
-}
 
 const ExamView = () => {
   const params = useParams<{ examId: string }>();
@@ -93,13 +85,51 @@ const ExamView = () => {
   const handleExamSubmit = async (answers: Record<string, string | string[]>) => {
     setLoading(true);
     try {
-      // Evaluate each answer
-      const results = await Promise.all(
-        Object.entries(answers).map(async ([questionId, answer]) => {
-          const result = await ExamService.evaluateAnswer(questionId, answer);
-          return { questionId, ...result };
-        })
-      );
+      if (!exam) {
+        throw new Error('Exam data is not available');
+      }
+
+      // Create a map of all questions for easier lookup
+      const questionsMap = new Map();
+      exam.sections.forEach(section => {
+        section.questions.forEach(question => {
+          questionsMap.set(question.id, question);
+        });
+      });
+
+      // Process each answer and get question details
+      const evaluationPromises = Object.entries(answers).map(async ([questionId, answer]) => {
+        const question = questionsMap.get(questionId);
+        if (!question) {
+          console.error('Question not found:', questionId);
+          return null;
+        }
+
+        try {
+          const result = await ExamService.evaluateAnswer(question, answer);
+          return {
+            answer,
+            questionId,
+            ...result
+          } as ExamResult;
+        } catch (error) {
+          console.error(`Error evaluating question ${questionId}:`, error);
+          return {
+            answer,
+            questionId,
+            score: 0,
+            feedback: 'Error evaluating answer',
+            error: true
+          } as ExamResult;
+        }
+      });
+
+      const rawResults = await Promise.all(evaluationPromises);
+      const results = rawResults.filter((result): result is ExamResult => result !== null);
+      
+      if (results.length === 0) {
+        throw new Error('No answers could be evaluated');
+      }
 
       setExamResults(results);
       setMode('results');

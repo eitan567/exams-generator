@@ -18,36 +18,32 @@ const ExamTest = ({ examData, onSwitchMode, onSubmit }: ExamTestProps) => {
 
   const handleAnswer = (
     questionId: string,
-    value: string,
-    questionType: 'single-choice' | 'multiple-choice' | 'open-ended',
-    checked?: boolean,
-    isOpenEnded: boolean = false
+    answer: string,
+    type: 'single-choice' | 'multiple-choice' | 'open-ended',
+    checked?: boolean
   ) => {
-    if (isOpenEnded) {
+    if (type === 'open-ended') {
       setAnswers(prev => ({
         ...prev,
-        [questionId]: value
+        [questionId]: answer
+      }));
+    } else if (type === 'multiple-choice') {
+      const currentAnswers = Array.isArray(answers[questionId]) ? answers[questionId] as string[] : [];
+      
+      setAnswers(prev => ({
+        ...prev,
+        [questionId]: checked 
+          ? [...currentAnswers, answer]
+          : currentAnswers.filter(a => a !== answer)
       }));
     } else {
-      setAnswers(prev => {
-        const currentAnswers = Array.isArray(prev[questionId]) ? prev[questionId] as string[] : [];
-        let updatedAnswers;
-
-        if (questionType === 'single-choice') {
-          // For single choice, replace the entire answer array
-          updatedAnswers = [value];
-        } else {
-          // For multiple choice, add or remove from array
-          if (checked) {
-            updatedAnswers = [...currentAnswers, value];
-          } else {
-            updatedAnswers = currentAnswers.filter(a => a !== value);
-          }
-        }
-
-        return { ...prev, [questionId]: updatedAnswers };
-      });
+      setAnswers(prev => ({
+        ...prev,
+        [questionId]: answer
+      }));
     }
+
+    console.log('Updated answers:', answers);
   };
 
   const handleNavigation = (direction: 'prev' | 'next') => {
@@ -111,11 +107,10 @@ const ExamTest = ({ examData, onSwitchMode, onSubmit }: ExamTestProps) => {
               <textarea
                 className="w-full p-2 border rounded"
                 rows={4}
-                onChange={(e) => handleAnswer(
-                  `${currentSectionIndex}-${qIndex}`, 
+                onChange={(e) => handleAnswer(   
+                  question.id,              
                   e.target.value, 
                   'open-ended',
-                  undefined, 
                   true
                 )}
                 value={
