@@ -409,47 +409,75 @@ export class ExamService {
         throw new Error('Invalid question data');
       }
 
-      const requestBody = {
-        question: {
-          id: question.id,
-          text: question.text,
-          type: question.type,
-          points: question.points
-        },
-        answer: answer
-      };
-      
-      const apiUrl = process.env.REACT_APP_API_URL || 'http://localhost:5000';
-      console.log('Making request to:', `${apiUrl}/api/evaluate`);
-
-      console.log('Request body:', requestBody);
-
-      const response = await fetch(`${apiUrl}/api/evaluate`, {
-        method: 'POST',
-        headers: { 
-          'Content-Type': 'application/json',
-          'Accept': 'application/json'
-        },
-        body: JSON.stringify(requestBody)
-      });
-
-      console.log('Response status:', response.status);
-
-      if (!response.ok) {
-        const errorText = await response.text();
-        console.error('Error response:', errorText);
+      if (question.type === 'open-ended') {
+        const requestBody = {
+          question: {
+            id: question.id,
+            text: question.text,
+            type: question.type,
+            points: question.points
+          },
+          answer: answer
+        };
         
-        try {
-          const errorData = JSON.parse(errorText);
-          throw new Error(errorData.error || 'Failed to evaluate answer');
-        } catch (e) {
-          throw new Error(`Server error: ${response.status}`);
-        }
-      }
+        const apiUrl = process.env.REACT_APP_API_URL || 'http://localhost:5000';
+        console.log('Making request to:', `${apiUrl}/api/evaluate`);
 
-      const result = await response.json();
-      console.log('Evaluation result:', result);
-      return result;
+        console.log('Request body:', requestBody);
+
+        const response = await fetch(`${apiUrl}/api/evaluate`, {
+          method: 'POST',
+          headers: { 
+            'Content-Type': 'application/json',
+            'Accept': 'application/json'
+          },
+          body: JSON.stringify(requestBody)
+        });
+
+        console.log('Response status:', response.status);
+
+        if (!response.ok) {
+          const errorText = await response.text();
+          console.error('Error response:', errorText);
+          
+          try {
+            const errorData = JSON.parse(errorText);
+            throw new Error(errorData.error || 'Failed to evaluate answer');
+          } catch (e) {
+            throw new Error(`Server error: ${response.status}`);
+          }
+        }
+
+        const result = await response.json();
+        console.log('Evaluation result:', result);
+        return result;
+      } else {
+        // Evaluate single-choice/multiple-choice answers locally
+        const correctAnswers = question.correctAnswers || [];
+        let score = 0;
+        if (question.type === 'single-choice') {
+          score = correctAnswers.includes(answer as string) ? question.points : 0;
+        } else if (question.type === 'multiple-choice') {
+          // Example: full score if all correct answers are selected and only those
+          const arrAnswer = Array.isArray(answer) ? answer : [answer];
+          const correctSelected = arrAnswer.filter(ans => correctAnswers.includes(ans)).length;
+          const incorrectSelected = arrAnswer.filter(ans => !correctAnswers.includes(ans)).length;
+          let partial = (correctSelected - incorrectSelected) / correctAnswers.length;
+          if (partial < 0) partial = 0;
+          if (partial > 1) partial = 1;
+          let score = Math.ceil(partial * question.points);
+          return {
+            score,
+            feedback: score === question.points ? 'תשובה מלאה' : score > 0 ? 'תשובה חלקית' : 'תשובה שגויה',
+            correctAnswer: correctAnswers
+          };
+        }
+        return {
+          score,
+          feedback: score === question.points ? 'תשובה נכונה' : 'תשובה שגויה',
+          correctAnswer: correctAnswers
+        };
+      }
     } catch (error) {
       console.error('Error in evaluateAnswer:', error);
       throw error;

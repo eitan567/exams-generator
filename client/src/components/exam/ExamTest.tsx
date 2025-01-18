@@ -55,7 +55,7 @@ export const ExamTest: React.FC<ExamTestProps> = ({ exam, onSubmit }) => {
   };
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-8 text-right" dir="rtl">
       {exam.sections.map((section) => (
         <Card key={section.id} className="mb-8">
           <CardContent className="p-6">
@@ -128,18 +128,29 @@ export const ExamTest: React.FC<ExamTestProps> = ({ exam, onSubmit }) => {
       </div>
 
       <AlertDialog open={showConfirmSubmit} onOpenChange={setShowConfirmSubmit}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>האם אתה בטוח שברצונך להגיש את המבחן?</AlertDialogTitle>
-            <AlertDialogDescription>
+        <AlertDialogContent dir="rtl" className="bg-white p-6 rounded-lg shadow-xl max-w-md mx-auto">
+          <AlertDialogHeader className="text-right space-y-3">
+            <AlertDialogTitle className="text-xl font-bold text-gray-900">
+              האם אתה בטוח שברצונך להגיש את המבחן?
+            </AlertDialogTitle>
+            <AlertDialogDescription className="text-gray-600">
               לאחר ההגשה לא ניתן יהיה לערוך את התשובות.
             </AlertDialogDescription>
           </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogAction onClick={() => {
-              setShowConfirmSubmit(false);
-              handleSubmit();
-            }}>
+          <AlertDialogFooter className="mt-6 flex justify-start gap-3">
+            <AlertDialogAction
+              onClick={() => setShowConfirmSubmit(false)}
+              className="px-4 py-2 bg-gray-100 text-gray-700 rounded-md hover:bg-gray-200 transition-colors"
+            >
+              בטל
+            </AlertDialogAction>
+            <AlertDialogAction
+              onClick={() => {
+                setShowConfirmSubmit(false);
+                handleSubmit();
+              }}
+              className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"
+            >
               הגש מבחן
             </AlertDialogAction>
           </AlertDialogFooter>

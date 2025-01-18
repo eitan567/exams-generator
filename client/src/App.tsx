@@ -13,7 +13,11 @@ export function App() {
   const { user } = useAuth();
 
   return (
-    <BrowserRouter>
+    <BrowserRouter
+    future={{
+        v7_startTransition: true,
+        v7_relativeSplatPath: true,
+      }}> 
       <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-50">
         <Navbar />
         <div className="p-6 pt-20"> {/* Added padding-top to account for fixed navbar */}
