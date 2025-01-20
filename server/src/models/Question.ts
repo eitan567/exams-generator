@@ -1,9 +1,11 @@
+import { Answer } from './Answer';
+
 export interface QuestionOptions {
   id: string;
   text: string;
   points: number;
   type: 'multiple-choice' | 'open-ended';
-  answers?: string[];
+  answers?: Answer[];
   correctAnswer?: string | number;
 }
 
@@ -12,7 +14,7 @@ export class Question {
   private text: string;
   private points: number;
   private type: 'multiple-choice' | 'open-ended';
-  private answers?: string[];
+  private answers?: Answer[];
   private correctAnswer?: string | number;
 
   constructor(options: QuestionOptions) {
@@ -40,7 +42,7 @@ export class Question {
     return this.type;
   }
 
-  getAnswers(): string[] | undefined {
+  getAnswers(): Answer[] | undefined {
     return this.answers;
   }
 
@@ -52,7 +54,7 @@ export class Question {
     let output = `${this.text} (${this.points} points)\n`;
     if (this.type === 'multiple-choice' && this.answers) {
       this.answers.forEach((answer, index) => {
-        output += `${index + 1}. ${answer}\n`;
+        output += `${index + 1}. ${answer.getText()}\n`;
       });
     }
     return output;

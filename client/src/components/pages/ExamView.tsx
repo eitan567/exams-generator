@@ -29,7 +29,7 @@ const ExamView = () => {
 
     // Ensure examId is a string before passing to loadExam
     loadExam(String(examId));
-  }, [params]);
+  }, []);
 
   const loadExam = async (id: string) => {
     setLoading(true);
@@ -168,8 +168,8 @@ const ExamView = () => {
             )}
           </div>
           <button
-            onClick={() => navigate('/')}
-            className="px-4 py-2 text-gray-600 hover:text-gray-800"
+            onClick={() => navigate('/dashboard')}
+            className="px-4 py-2 bg-white border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50 transition-colors shadow-sm"
           >
             חזרה לרשימה
           </button>

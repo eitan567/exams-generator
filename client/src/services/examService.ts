@@ -105,12 +105,23 @@ export class ExamService {
 
           // Save answers if they exist
           if (question.answers) {
-            const answersToInsert = question.answers.map((answer: string, index: number) => ({
-              question_id: savedQuestion.id,
-              text: answer,
-              is_correct: question.correctAnswers?.includes(answer),
-              order_index: index
-            }));
+            const answersToInsert = question.answers.map((answer: any, index: number) => {
+              let answerText = answer;
+              let points = 0;
+              
+              if (typeof answer === 'object') {
+                answerText = answer.text || '';
+                points = answer.points || 0;
+              }
+
+              return {
+                question_id: savedQuestion.id,
+                text: answerText,
+                points: points,
+                is_correct: question.correctAnswers?.includes(answerText),
+                order_index: index
+              };
+            });
 
             const { error: answersError } = await supabase
               .from('answers')
@@ -225,7 +236,8 @@ export class ExamService {
               question_id: savedQuestion.id,
               text: answer.text,
               is_correct: answer.is_correct,
-              order_index: index
+              order_index: index,
+              points: answer.points || 0
             }));
 
             const { error: answersError } = await supabase
@@ -310,61 +322,75 @@ export class ExamService {
 
   static async updateExam(examId: string, updates: Partial<Exam>): Promise<boolean> {
     try {
-      // Update the exam details excluding sections
-      const { sections, ...examUpdates } = updates;
-      const { error: examError } = await supabase
-        .from('exams')
-        .update(examUpdates)
-        .eq('id', examId);
-
-      if (examError) throw examError;
-
-      // Update sections if provided
+      console.log('Starting exam update for exam:', examId);
+      const { sections } = updates;
+      
       if (sections) {
         for (const section of sections) {
-          const { id: sectionId, questions, ...sectionUpdates } = section;
-          const { error: sectionError } = await supabase
-            .from('sections')
-            .update(sectionUpdates)
-            .eq('id', sectionId);
-
-          if (sectionError) throw sectionError;
-
-          // Update questions within the section
-          if (questions) {
-            for (const question of questions) {
-              const { id: questionId, answers, ...questionUpdates } = question;
+          if (section.questions) {
+            for (const question of section.questions) {
+              console.log('Updating question:', question.id, 'text:', question.text);
+              
+              // First update the question
               const { error: questionError } = await supabase
                 .from('questions')
-                .update(questionUpdates)
-                .eq('id', questionId);
+                .update({
+                  text: question.text,
+                  type: question.type,
+                  points: question.points,
+                  is_ai_generated: question.is_ai_generated
+                })
+                .eq('id', question.id);
 
-              if (questionError) throw questionError;
+              if (questionError) {
+                console.error('Error updating question:', questionError);
+                throw questionError;
+              }
 
-              // Update answers within the question
-              if (answers) {
-                for (const answer of answers) {
-                  const { id: answerId, ...answerUpdates } = answer;
-                  const { error: answerError } = await supabase
-                    .from('answers')
-                    .update(answerUpdates)
-                    .eq('id', answerId);
+              // Then handle answers if they exist
+              if (question.answers && question.answers.length > 0) {
+                // Delete existing answers
+                const { error: deleteError } = await supabase
+                  .from('answers')
+                  .delete()
+                  .eq('question_id', question.id);
 
-                  if (answerError) throw answerError;
+                if (deleteError) {
+                  console.error('Error deleting answers:', deleteError);
+                  throw deleteError;
+                }
+
+                // Insert new answers
+                const answersToInsert = question.answers.map((answer, index) => ({
+                  question_id: question.id,
+                  text: answer.text,
+                  is_correct: answer.is_correct,
+                  points: answer.points || 0,
+                  order_index: index,
+                  created_at: new Date().toISOString(),
+                  is_ai_generated: answer.is_ai_generated
+                }));
+
+                const { error: answersError } = await supabase
+                  .from('answers')
+                  .insert(answersToInsert);
+
+                if (answersError) {
+                  console.error('Error inserting answers:', answersError);
+                  throw answersError;
                 }
               }
             }
           }
         }
       }
-
+  
       return true;
     } catch (error) {
       console.error('Error in updateExam:', error);
       return false;
     }
   }
-
   static async deleteExam(examId: string): Promise<boolean> {
     try {
       const { error } = await supabase

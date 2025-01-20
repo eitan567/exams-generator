@@ -4,8 +4,7 @@ import { Card, CardContent } from '../ui/card';
 import { CheckCircle2, XCircle } from 'lucide-react';
 
 export const ExamResults: React.FC<ExamResultsProps> = ({ exam, results }) => {
-  console.log("results :",results);
-  // Calculate total score
+  // Calculate total score normalized to 100 points
   const calculateTotalScore = () => {
     let totalPoints = 0;
     let earnedPoints = 0;
@@ -13,7 +12,6 @@ export const ExamResults: React.FC<ExamResultsProps> = ({ exam, results }) => {
     exam.sections.forEach(section => {
       section.questions.forEach(question => {
         const result = results.find(r => r.questionId === question.id);
-        console.log("result :",result);
         if (result) {
           totalPoints += question.points;
           earnedPoints += (result.score / 100) * question.points;
@@ -21,10 +19,13 @@ export const ExamResults: React.FC<ExamResultsProps> = ({ exam, results }) => {
       });
     });
 
+    // Normalize to 100 points
+    const normalizedScore = totalPoints > 0 ? Math.round((earnedPoints / totalPoints) * 100) : 0;
+
     return {
-      totalPoints,
-      earnedPoints,
-      percentage: Math.round((earnedPoints / totalPoints) * 100)
+      totalPoints: 100, // Always show out of 100
+      earnedPoints: normalizedScore,
+      percentage: normalizedScore
     };
   };
 
@@ -45,7 +46,7 @@ export const ExamResults: React.FC<ExamResultsProps> = ({ exam, results }) => {
               {percentage}
             </div>
             <p className="text-gray-600 mt-2">
-              {earnedPoints.toFixed(1)} מתוך {totalPoints} נקודות
+              {percentage} מתוך 100 נקודות
             </p>
           </div>
         </CardContent>

@@ -176,9 +176,9 @@ async function processChunk(chunk: string, options: any, part: number, total: nu
     
     Requirements:
     Create exactly:
-    ${options.openQuestions ? `- ${questionsPerType} open-ended questions (30 points each)` : ''}
-    ${options.multipleChoice ? `- ${questionsPerType} multiple-choice questions (20 points each, exactly 4 possible answers)` : ''}
-    ${options.singleChoice ? `- ${questionsPerType} single-choice questions (10 points each, exactly 4 possible answers)` : ''}
+    ${options.openQuestions ? `- ${questionsPerType} open-ended questions` : ''}
+    ${options.multipleChoice ? `- ${questionsPerType} multiple-choice questions (exactly 4 possible answers)` : ''}
+    ${options.singleChoice ? `- ${questionsPerType} single-choice questions (exactly 4 possible answers)` : ''}
     
     Return as a JSON object with this exact structure:
     {
@@ -190,8 +190,7 @@ async function processChunk(chunk: string, options: any, part: number, total: nu
           "questions": [
             {
               "text": "question text here",
-              "type": "open-ended",
-              "points": 30
+              "type": "open-ended"
             }
           ]
         },
@@ -202,7 +201,6 @@ async function processChunk(chunk: string, options: any, part: number, total: nu
             {
               "text": "question text here",
               "type": "multiple-choice",
-              "points": 20,
               "answers": ["answer1", "answer2", "answer3", "answer4"],
               "correctAnswers": ["answer2", "answer3"]
             }
@@ -215,7 +213,6 @@ async function processChunk(chunk: string, options: any, part: number, total: nu
             {
               "text": "question text here",
               "type": "single-choice",
-              "points": 10,
               "answers": ["answer1", "answer2", "answer3", "answer4"],
               "correctAnswers": ["answer2"]
             }
@@ -234,9 +231,13 @@ async function processChunk(chunk: string, options: any, part: number, total: nu
         { role: "user", content: prompt }
       ],
       model: "deepseek-chat",
+      response_format:{
+        'type': 'json_object'
+      }
     });
 
     const content = completion.choices[0]?.message?.content;
+    console.log('AI response:', content);
     if (!content) {
       throw new Error('No content received from API');
     }
@@ -291,6 +292,11 @@ app.post('/api/upload', upload.single('file'), async (req: express.Request, res:
   }
 });
 
+// Helper function to round to the nearest integer
+function roundToNearestInteger(num: number): number {
+  return Math.round(num);
+}
+
 // Move the exam generation logic into a reusable function
 async function generateExam(fileData: UploadedFile, options: ExamOptions): Promise<ExamData> {
   // Extract text from file if not already extracted
@@ -307,11 +313,48 @@ async function generateExam(fileData: UploadedFile, options: ExamOptions): Promi
     chunks.map((chunk, index) => processChunk(chunk, options, index + 1, chunks.length))
   );
 
+  console.log('Results:', results);
+
   // Combine results
-  return {
+  const examData = {
     title: "מבחן",
     sections: results.flatMap(result => result.sections)
   };
+
+  // Calculate and assign points to each question and answer
+  const totalSections = examData.sections.length;
+  const pointsPerSection = 100 / totalSections;
+
+  examData.sections.forEach(section => {
+    const questionsCount = section.questions.length;
+    const pointsPerQuestion = pointsPerSection / questionsCount;
+
+    section.questions.forEach((question: { points: number; type: string; correctAnswers: string | any[]; answers: any[]; }) => {
+      question.points = roundToNearestInteger(pointsPerQuestion);
+
+      if (question.type === 'multiple-choice') {
+        const correctAnswersCount = question.correctAnswers?.length || 1;
+        const pointsPerAnswer = roundToNearestInteger(question.points / correctAnswersCount);
+
+        // Convert string answers to objects if needed
+        question.answers = question.answers?.map(answer => 
+          typeof answer === 'string' ? { text: answer, points: 0 } : answer
+        );
+
+        console.log('question.answers:', question.answers);
+
+        question.answers?.forEach(answer => {
+          if (question.correctAnswers?.includes(answer.text)) {
+            answer.points = pointsPerAnswer;
+          } else {
+            answer.points = 0;
+          }
+        });
+      }
+    });
+  });
+
+  return examData;
 }
 
 // Modify create exam endpoint to use the function directly
@@ -330,7 +373,7 @@ app.post('/api/create-exam', upload.single('file'), async (req: express.Request,
 
     // Generate exam content directly
     const examData = await generateExam(fileData, options);
-    
+
     res.json({ 
       success: true,
       exam: examData
@@ -383,6 +426,9 @@ app.post('/api/generate-alias', async (req: express.Request, res: express.Respon
         }
       ],
       model: "deepseek-chat",
+      response_format:{
+        'type': 'json_object'
+      }
     });
 
     const content = completion.choices[0]?.message?.content;
@@ -498,6 +544,9 @@ const completion = await openai.chat.completions.create({
     }
   ],
   model: "deepseek-chat",
+  response_format:{
+    'type': 'json_object'
+  }
 });
 
 const content = completion.choices[0]?.message?.content;

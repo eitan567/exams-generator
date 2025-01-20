@@ -1,9 +1,9 @@
 // src/components/exam/ExamEditor.tsx
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Exam, Question, Answer } from '../../types/exam';
 import { Card, CardContent } from '../ui/card';
 import { Button } from '../ui/button';
-import { Loader2 } from 'lucide-react';
+import { Loader2, Trash2 } from 'lucide-react'; // Add Trash2 import
 
 interface ExamEditorProps {
   exam: Exam;
@@ -13,9 +13,70 @@ interface ExamEditorProps {
 export const ExamEditor: React.FC<ExamEditorProps> = ({ exam, onExamUpdate }) => {
   const [saving, setSaving] = useState(false);
   const [isDirty, setIsDirty] = useState(false);
-  const [localExam, setLocalExam] = useState<Exam>(exam);
+  const [localExam, setLocalExam] = useState<Exam>(() => {
+    // Try to load from sessionStorage
+    const savedExam = sessionStorage.getItem('currentExam');
+    if (savedExam) {
+      try {
+        return JSON.parse(savedExam);
+      } catch {
+        // If parsing fails, use the provided exam
+      }
+    }
+    return exam;
+  });
+
+  // // Save to sessionStorage whenever localExam changes
+  // useEffect(() => {
+  //   sessionStorage.setItem('currentExam', JSON.stringify(localExam));
+  // }, [localExam]);
+
+  // // Clear saved exam when component unmounts
+  // useEffect(() => {
+  //   return () => {
+  //     sessionStorage.removeItem('currentExam');
+  //   };
+  // }, []);
+
+  // Prevent page refresh when there are unsaved changes
+  useEffect(() => {
+    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+      if (isDirty) {
+        e.preventDefault();
+        return e.returnValue = 'יש לך שינויים שלא נשמרו. האם אתה בטוח שברצונך לעזוב את הדף?';
+      }
+    };
+
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => {
+      window.removeEventListener('beforeunload', handleBeforeUnload);
+    };
+  }, [isDirty]);
   const [changedQuestions, setChangedQuestions] = useState<Set<string>>(new Set());
 
+  // Add new function to calculate total points
+  const calculateTotalPoints = (sections = localExam.sections) => {
+    return sections.reduce((total, section) => 
+      total + section.questions.reduce((sectionTotal, question) => 
+        sectionTotal + question.points, 0
+      ), 0
+    );
+  };
+
+  // Add new function to normalize points to 100
+  const normalizePoints = (updatedExam: Exam) => {
+    const totalPoints = calculateTotalPoints(updatedExam.sections);
+    if (totalPoints === 0) return;
+
+    updatedExam.sections.forEach(section => {
+      section.questions.forEach(question => {
+        question.points = Math.round((question.points / totalPoints) * 100);
+        question.points = Math.round(question.points); // Ensure points are integers
+      });
+    });
+  };
+
+  // Modify handleQuestionUpdate to include point normalization
   const handleQuestionUpdate = (
     sectionIndex: number,
     questionIndex: number,
@@ -23,18 +84,29 @@ export const ExamEditor: React.FC<ExamEditorProps> = ({ exam, onExamUpdate }) =>
   ) => {
     const updatedExam = { ...localExam };
     updatedExam.sections[sectionIndex].questions[questionIndex] = updatedQuestion;
+
+    // Normalize points when they're changed
+    if (updatedQuestion.points !== localExam.sections[sectionIndex].questions[questionIndex].points) {
+      normalizePoints(updatedExam);
+    }
+
     setIsDirty(true);
     setLocalExam(updatedExam);
     setChangedQuestions((prev) => new Set(prev).add(updatedQuestion.id));
   };
 
+  // Modify handleAddQuestion to set initial points based on type
   const handleAddQuestion = (sectionIndex: number) => {
+    const currentTotal = calculateTotalPoints();
+    const remainingPoints = Math.max(100 - currentTotal, 0);
+    const defaultPoints = Math.min(10, remainingPoints); // Default 10 points or remaining points
+
     const newQuestion: Question = {
       id: `new-${Date.now()}`,
       section_id: localExam.sections[sectionIndex].id,
       text: '',
       type: 'single-choice',
-      points: 0,
+      points: defaultPoints,
       order_index: localExam.sections[sectionIndex].questions.length,
       created_at: new Date().toISOString(),
       answers: Array.from({ length: 4 }, (_, index) => ({
@@ -50,6 +122,7 @@ export const ExamEditor: React.FC<ExamEditorProps> = ({ exam, onExamUpdate }) =>
     };
     const updatedExam = { ...localExam };
     updatedExam.sections[sectionIndex].questions.push(newQuestion);
+    normalizePoints(updatedExam);
     setIsDirty(true);
     setLocalExam(updatedExam);
     setChangedQuestions((prev) => new Set(prev).add(newQuestion.id));
@@ -128,6 +201,12 @@ export const ExamEditor: React.FC<ExamEditorProps> = ({ exam, onExamUpdate }) =>
 
   return (
     <div className="space-y-6">
+      <div className="bg-white p-4 rounded-lg shadow mb-4">
+        <h3 className="text-lg font-medium mb-2">ניקוד כולל: {calculateTotalPoints()}/100</h3>
+        {calculateTotalPoints() !== 100 && (
+          <p className="text-amber-600">שים לב: סך כל הנקודות צריך להיות 100</p>
+        )}
+      </div>
       {/* Floating save button when changes are made */}
       {isDirty && (
         <div className="fixed bottom-6 right-6 z-10">
@@ -216,6 +295,7 @@ export const ExamEditor: React.FC<ExamEditorProps> = ({ exam, onExamUpdate }) =>
                                     value={answer.text}
                                     onChange={(e) => {
                                       const updatedQuestion = { ...question };
+                                      // Update text field directly, not as JSON
                                       updatedQuestion.answers![answerIndex].text = e.target.value;
                                       updatedQuestion.answers![answerIndex].is_ai_generated = false;
                                       handleQuestionUpdate(sectionIndex, questionIndex, updatedQuestion);
@@ -239,8 +319,33 @@ export const ExamEditor: React.FC<ExamEditorProps> = ({ exam, onExamUpdate }) =>
                                       "form-checkbox h-5 w-5 text-blue-600 rounded ml-2"
                                     }
                                   />
-                                  <Button variant="destructive" onClick={() => handleDeleteAnswer(sectionIndex, questionIndex, answerIndex)}>
-                                    מחק תשובה
+                                  {question.type === 'multiple-choice' && (
+                                    <input
+                                      type="number"
+                                      value={answer.points || 0}
+                                      onChange={(e) => {
+                                      const updatedQuestion = { ...question };
+                                      // Update points field directly
+                                      updatedQuestion.answers![answerIndex].points = Number(e.target.value);
+                                      // Ensure text field contains only the text, not JSON
+                                      if (updatedQuestion.answers![answerIndex].text && typeof updatedQuestion.answers![answerIndex].text === 'object') {
+                                        const answerText = updatedQuestion.answers![answerIndex].text as {text?: string};
+                                        updatedQuestion.answers![answerIndex].text = answerText.text || '';
+                                      }
+                                      handleQuestionUpdate(sectionIndex, questionIndex, updatedQuestion);
+                                      }}
+                                      className="w-16 border rounded p-1 mr-2"
+                                      min={0}
+                                      max={100}
+                                    />
+                                  )}
+                                  <Button 
+                                    variant="ghost" 
+                                    size="icon"
+                                    onClick={() => handleDeleteAnswer(sectionIndex, questionIndex, answerIndex)}
+                                    className="h-8 w-8 p-0 hover:bg-red-100 hover:text-red-600"
+                                  >
+                                    <Trash2 className="h-4 w-4" />
                                   </Button>
                                 </div>
                               );
@@ -267,8 +372,13 @@ export const ExamEditor: React.FC<ExamEditorProps> = ({ exam, onExamUpdate }) =>
                           />
                         </div>
                       </div>
-                      <Button variant="destructive" onClick={() => handleDeleteQuestion(sectionIndex, questionIndex)}>
-                        מחק שאלה
+                      <Button 
+                        variant="ghost" 
+                        size="icon"
+                        onClick={() => handleDeleteQuestion(sectionIndex, questionIndex)}
+                        className="h-8 w-8 p-0 hover:bg-red-100 hover:text-red-600"
+                      >
+                        <Trash2 className="h-4 w-4" />
                       </Button>
                     </div>
                   </div>
